@@ -1,24 +1,24 @@
+import _root_.facade.amazonaws.services.mwaa.CreateCliTokenRequest
+import _root_.facade.amazonaws.services.mwaa.MWAA
 import cats.effect._
-import cats.implicits._
 import cats.effect.std.Random
+import cats.implicits._
 import feral.lambda._
 import feral.lambda.events._
 import feral.lambda.http4s._
+import io.circe.parser._
 import natchez.Trace
 import natchez.http4s.NatchezMiddleware
 import natchez.xray.XRay
+import org.http4s.AuthScheme
+import org.http4s.Credentials
 import org.http4s.HttpRoutes
+import org.http4s.Request
+import org.http4s.Uri
 import org.http4s.client.Client
 import org.http4s.dsl.Http4sDsl
 import org.http4s.ember.client.EmberClientBuilder
-import org.http4s.Request
-import org.http4s.Credentials
-import org.http4s.AuthScheme
-import _root_.facade.amazonaws.services.mwaa.MWAA
-import _root_.facade.amazonaws.services.mwaa.CreateCliTokenRequest
-import org.http4s.Uri
 import fs2.Stream
-import fs2.text.utf8
 
 /** For a gentle introduction, please look at the `KinesisLambda` first which
   * uses `IOLambda.Simple`.
@@ -70,46 +70,94 @@ object http4sHandler
     import org.http4s.headers._
     import org.http4s.MediaType
 
-    val routes = HttpRoutes.of[F] { case GET -> Root / "wf" / dagId =>
-      val tokenResponse = Async[F].fromFuture(
-        Concurrent[F].delay {
-          val mwaa = new MWAA()
-          mwaa
-            .createCliToken(CreateCliTokenRequest("dev-datalake"))
-            .promise()
-            .toFuture
-        }
-      )
+    val routes = HttpRoutes.of[F] {
+      case GET -> Root / "wf" / dagId / "executionDate" / executionDate =>
+        val tokenResponse = Async[F].fromFuture(
+          Concurrent[F].delay {
+            val mwaa = new MWAA()
+            mwaa
+              .createCliToken(CreateCliTokenRequest("dev-datalake"))
+              .promise()
+              .toFuture
+          }
+        )
 
-      for {
-        r <- tokenResponse
-        hostname <- Async[F].fromEither(
-          Uri
-            .fromString(s"https://${r.WebServerHostname}/aws_mwaa/cli")
-            .leftMap(pf =>
+        for {
+          r <- tokenResponse
+          hostname <- Async[F].fromEither(
+            Uri
+              .fromString(s"https://${r.WebServerHostname}/aws_mwaa/cli")
+              .leftMap(pf =>
+                new RuntimeException(
+                  "Failed to parse web server hostname",
+                  pf.getCause()
+                )
+              )
+          )
+          token <- Async[F].fromEither(
+            r.CliToken.toRight(new RuntimeException("CLI Token is empty"))
+          )
+          cmd = s"tasks states-for-dag-run -o json $dagId $executionDate"
+          request =
+            Request[F](
+              uri = hostname,
+              method = POST
+            ).withEntity(cmd)
+              .withHeaders(
+                Authorization(Credentials.Token(AuthScheme.Bearer, token)),
+                `Content-Type`(MediaType.text.plain)
+              )
+          _ <- Async[F].delay(println(s"request: $request, $cmd"))
+          body <- client.fetchAs[String](request)
+          _ <- Async[F].delay(
+            println(
+              s"body ${if (body.length > 100) "<truncated>" else ""}: ${body
+                .take(100)}"
+            )
+          )
+          outputs <- Async[F].fromEither(
+            parse(body)
+              .flatMap(_.as[Map[String, String]])
+              .leftMap(e =>
+                new RuntimeException(
+                  "Failed to parse MWAA CLI response body",
+                  e.getCause()
+                )
+              )
+          )
+          _ <-
+            outputs
+              .get("stderr")
+              .toLeft(()) match {
+              case Left(e) if e.trim.nonEmpty =>
+                Stream(e)
+                  .through(fs2.text.base64.decode[F])
+                  .compile
+                  .toList
+                  .flatMap { e =>
+                    val mwaaError =
+                      new String(e.toArray)
+                    Async[F]
+                      .raiseError[Unit](
+                        new RuntimeException(
+                          s"MWAA returned error:\n$mwaaError"
+                        )
+                      )
+                  }
+              case _ => Async[F].unit
+            }
+          stdout = outputs
+            .get("stdout")
+            .toRight(
               new RuntimeException(
-                "Failed to pasre web server hostname",
-                pf.getCause()
+                "'stdout' JSON property is not found in MWAA API respone body"
               )
             )
-        )
-        token <- Async[F].fromEither(
-          r.CliToken.toRight(new RuntimeException("CLI Token is empty"))
-        )
-        cmd = s"tasks states-for-dag-run -o json $dagId"
-        request =
-          Request[F](
-            uri = hostname,
-            method = POST,
-            body = Stream(cmd).through(utf8.encode)
-          )
-            .putHeaders(
-              Authorization(Credentials.Token(AuthScheme.Bearer, token)),
-              `Content-Type`(MediaType.text.plain)
-            )
-        states <- client.expect[String](request)
-        res <- Ok(states)
-      } yield res
+
+          out <- Async[F].fromEither(stdout)
+          decoded = Stream(out).through(fs2.text.base64.decode[F])
+          res <- Ok(decoded)
+        } yield res
     }
 
     NatchezMiddleware.server(routes)

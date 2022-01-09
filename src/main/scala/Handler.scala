@@ -14,7 +14,7 @@ import sttp.client3._
 final case class TriggerDag(dagId: String, execDate: Option[String])
 
 object TriggerDag {
-  implicit val barCodec = deriveCodec[TriggerDag]
+  implicit val triggerDagCodec = deriveCodec[TriggerDag]
 }
 
 object Handler {
@@ -25,7 +25,7 @@ object Handler {
   ): Future[APIGatewayProxyStructuredResultV2] = {
     val mwaa = new MWAA()
     val token = mwaa
-      .createCliToken(CreateCliTokenRequest("dev-datalake"))
+      .createCliToken(CreateCliTokenRequest("my-mwaa-env"))
       .promise()
       .toFuture
 
@@ -73,7 +73,7 @@ object Handler {
 
 object TestApp {
   val body = Json
-    .encode(TriggerDag("dometic_pm_dev", Some("2021-07-25T11:07:00")))
+    .encode(TriggerDag("mydag", Some("2021-07-25T11:07:00")))
     .toUtf8String
   val event =
     js.Dynamic

@@ -32,16 +32,20 @@ val awsSdkVersion = "2.892.0"
 val awsSdkScalajsFacadeVersion = s"0.33.0-v${awsSdkVersion}"
 val http4sVersion = "0.23.7"
 val natchezVersion = "0.1.6"
+val feralVersion = "0.1.0-M1"
 
 libraryDependencies ++= Seq(
-  "org.typelevel" %% "feral-lambda" % "0.1.0-M1",
-  "org.typelevel" %%% "feral-lambda-http4s" % "0.1.0-M1",
+  // Feral example deps:
+  "io.circe" %%% "circe-parser" % "0.15.0-M1",
+  "org.typelevel" %% "feral-lambda" % feralVersion,
+  "org.typelevel" %%% "feral-lambda-http4s" % feralVersion,
   "org.http4s" %%% "http4s-dsl" % http4sVersion,
   "org.http4s" %%% "http4s-server" % http4sVersion,
   "org.http4s" %%% "http4s-ember-client" % http4sVersion,
   "org.tpolecat" %%% "natchez-xray" % natchezVersion,
   "org.tpolecat" %%% "natchez-http4s" % "0.2.1",
-  
+
+  // Sttp example Example (didn't work for me :-( )
   "org.scala-js" %%% "scala-js-macrotask-executor" % "1.0.0",
   // "org.scala-js" %%% "scalajs-dom" % "2.0.0",
   "io.bullet" %%% "borer-core" % "1.7.2",
@@ -53,16 +57,10 @@ libraryDependencies ++= Seq(
 
 Compile / npmDependencies ++= Seq(
   "aws-sdk" -> awsSdkVersion
-  // "abortcontroller-polyfill" -> "1.7.3",
-  // "cross-fetch" -> "3.1.4",
-  // "headers" -> "0.9.6"
 )
 
 // Optional: Include some nodejs types (useful for, say, accessing the env)
 //libraryDependencies += "net.exoego" %%% "scala-js-nodejs-v12" % "0.14.0"
-
-// Include scalatest
-// libraryDependencies += "org.scalatest" %%% "scalatest" % "3.1.1" % "test"
 
 // Package lambda as a zip. Use `universal:packageBin` to create the zip
 topLevelDirectory := None
@@ -73,6 +71,5 @@ Universal / mappings ++= (Compile / fullOptJS / webpack).value.map { f =>
 
 // scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.CommonJSModule))
 scalaJSUseMainModuleInitializer := true
-// scalacOptions ~= (_.filterNot(Set("-Wdead-code")))
 
 npmPackageStage := org.scalajs.sbtplugin.Stage.FastOpt
