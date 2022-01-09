@@ -16,9 +16,12 @@ import org.http4s.HttpRoutes
 import org.http4s.Request
 import org.http4s.Uri
 import org.http4s.client.Client
+import org.http4s.headers._
+import org.http4s.MediaType
 import org.http4s.dsl.Http4sDsl
 import org.http4s.ember.client.EmberClientBuilder
 import fs2.Stream
+import io.scalajs.nodejs.process.{Process => JsProcess}
 
 /** For a gentle introduction, please look at the `KinesisLambda` first which
   * uses `IOLambda.Simple`.
@@ -67,16 +70,17 @@ object http4sHandler
   ): HttpRoutes[F] = {
     implicit val dsl = Http4sDsl[F]
     import dsl._
-    import org.http4s.headers._
-    import org.http4s.MediaType
+
+    val mwaaEnvName = JsProcess.env("MWAA_ENV_NAME").getOrElse("my-mwaa")
 
     val routes = HttpRoutes.of[F] {
       case GET -> Root / "wf" / dagId / "executionDate" / executionDate =>
         val tokenResponse = Async[F].fromFuture(
           Concurrent[F].delay {
             val mwaa = new MWAA()
+            println(s"env: $mwaaEnvName")
             mwaa
-              .createCliToken(CreateCliTokenRequest("dev-datalake"))
+              .createCliToken(CreateCliTokenRequest(mwaaEnvName))
               .promise()
               .toFuture
           }
