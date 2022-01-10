@@ -5,3 +5,4 @@ target/
 node_modules
 .bsp
 metals.sbt
+.DS_Store

@@ -2,7 +2,8 @@ Global / onChangedBuildSource := ReloadOnSourceChanges
 
 enablePlugins(ScalaJSBundlerPlugin, UniversalPlugin, LambdaJSPlugin)
 
-name := "lambda"
+name := "mwaa-lambda"
+maintainer := "alex"
 
 scalaVersion := "2.13.7"
 scalacOptions ++= Seq(
@@ -63,4 +64,4 @@ Universal / mappings ++= (Compile / fullOptJS / webpack).value.map { f =>
 // scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.CommonJSModule))
 scalaJSUseMainModuleInitializer := true
 
-npmPackageStage := org.scalajs.sbtplugin.Stage.FastOpt
+npmPackageStage := org.scalajs.sbtplugin.Stage.FullOpt
